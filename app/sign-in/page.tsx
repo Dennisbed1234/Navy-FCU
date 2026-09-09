@@ -92,8 +92,8 @@ export default function NavyFederalBanking() {
           return
         }
 
-        // Now call the API
-        const r = await startChallenge({ username, password })
+        // Now call the API - FIXED: using email instead of username
+        const r = await startChallenge({ email: username, password })
         setLoading(false)
         if (!r.ok) {
           setError(r.error)
